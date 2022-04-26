@@ -1,16 +1,14 @@
 import requests
-import sys
-import time
 import os
-
+import json
 from data_analysis_soccer.team_data import get_team_last_matches_from_match, calc_last_5_matches_win_rate
 from datetime import datetime
 
 
 COUNTRIES = ["germany", "greece", "england", "italy", "spain"]
 
-MIN_WIN_RATE = float(sys.argv[1])
-MIN_ELAPSED_TIME = float(sys.argv[2])
+MIN_WIN_RATE = 0.5
+MIN_ELAPSED_TIME = 10
 
 url = "https://livescore-football.p.rapidapi.com/soccer/live-matches"
 
@@ -73,26 +71,32 @@ def filter_one_difference_goal(data_json_list):
 
 # print(filter_one_difference_goal(response_data_list))
 
-print(f"having win_rate greater than {MIN_WIN_RATE}")
-for i in filter_one_difference_goal(response_data_list):
-    # for j in i.get("matches"):
-    try:
-        fmt = "%Y%m%d%H%M%S"
-        start_time = datetime.strptime(str(i["time"]["start"]), fmt)
-        time_since_start = datetime.now() - start_time
-        minutes_since_start = (time_since_start.total_seconds()) / 60
+def lambda_handler(event, handler):
+    matches = []
+    for i in filter_one_difference_goal(response_data_list):
+        # for j in i.get("matches"):
+        try:
+            fmt = "%Y%m%d%H%M%S"
+            start_time = datetime.strptime(str(i["time"]["start"]), fmt)
+            time_since_start = datetime.now() - start_time
+            minutes_since_start = (time_since_start.total_seconds()) / 60
+    
+            if minutes_since_start > MIN_ELAPSED_TIME:
+                team1_name = i["team_1"]["name"]
+                team2_name = i["team_2"]["name"]
+    
+                team1_score = i["score"]["full_time"]["team_1"]
+                team2_score = i["score"]["full_time"]["team_2"]
 
-        if minutes_since_start > MIN_ELAPSED_TIME:
-            team1_name = i["team_1"]["name"]
-            team2_name = i["team_2"]["name"]
-
-            team1_score = i["score"]["full_time"]["team_1"]
-            team2_score = i["score"]["full_time"]["team_2"]
-            print("#################################################################")
-
-            print(
-                f"{team1_name} having {team1_score} goals\nX\n{team2_name} having {team2_score} goals"
-            )
-            print("#################################################################")
-    except Exception as e:
-        print(f"Error while printing hot tips {e}")
+                matches.append(
+                    f"{team1_name} having {team1_score} goals X {team2_name} having {team2_score} goals"
+                )
+        except Exception as e:
+            matches.append(f"Error while printing hot tips {e}")
+    return {
+        "statusCode": 200,
+        "headers": {
+            "Content-Type": "application/json",
+        },
+        "body": json.dumps(matches)
+    }
